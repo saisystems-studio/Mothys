@@ -7,7 +7,8 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Products from './pages/Products'
 import Units from './pages/Units'
-import EntryBilling from './pages/EntryBilling'
+import Entry from './pages/Entry'
+import Billing from './pages/Billing'
 import Stock from './pages/Stock'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
@@ -29,7 +30,10 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/products" element={<Products />} />
           <Route path="/units" element={<Units />} />
-          <Route path="/entry-billing" element={<EntryBilling />} />
+          <Route path="/entry" element={<Entry />} />
+          <Route path="/billing" element={<Billing />} />
+          {/* Old URL kept so existing bookmarks still work */}
+          <Route path="/entry-billing" element={<Navigate to="/billing" replace />} />
           <Route path="/stock" element={<Stock />} />
           <Route path="/reports" element={<Reports />} />
           <Route element={<ProtectedRoute adminOnly />}>

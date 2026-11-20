@@ -21,7 +21,7 @@ from app.api.stock import router as stock_router
 from app.api.dashboard import router as dashboard_router
 from app.api.reports import router as reports_router
 from app.api.auth import router as auth_router
-
+from app.api.company_profile import router as company_profile_router
 
 APP_ENV = os.getenv("APP_ENV", "development").lower()
 
@@ -64,7 +64,7 @@ app.include_router(stock_router)
 app.include_router(dashboard_router)
 app.include_router(reports_router)
 app.include_router(auth_router)
-
+app.include_router(company_profile_router)
 
 @app.get("/")
 def home():

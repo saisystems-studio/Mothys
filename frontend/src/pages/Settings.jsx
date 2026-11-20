@@ -11,7 +11,7 @@ import useToast from '../hooks/useToast'
 import { createUser, getUsers, resetUserPassword, setUserStatus, updateUser } from '../services/usersService'
 import { getRoles } from '../services/rolesService'
 import { getErrorMessage } from '../services/api'
-
+import CompanyProfileCard from '../components/CompanyProfileCard'
 const load = () => Promise.all([getUsers(), getRoles()])
 
 export default function Settings() {
@@ -190,7 +190,9 @@ export default function Settings() {
           </button>
         </div>
       </form>
-
+<div className="section-gap">
+  <CompanyProfileCard />
+</div>
       <div className="table-card section-gap">
         <div className="report-head" style={{ background: 'var(--table-head)' }}>
           Users

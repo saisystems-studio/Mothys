@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, Box, Layers, ShoppingCart, Database, BarChart3, SlidersHorizontal, LogOut } from 'lucide-react'
+import { LayoutGrid, Box, Layers, PackagePlus, ShoppingCart, Database, BarChart3, SlidersHorizontal, LogOut } from 'lucide-react'
 import Logo from './Logo'
 import useAuth from '../hooks/useAuth'
 
@@ -7,7 +7,8 @@ const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { to: '/products', label: 'Products', icon: Box },
   { to: '/units', label: 'Units', icon: Layers },
-  { to: '/entry-billing', label: 'Entry & Billing', icon: ShoppingCart },
+  { to: '/entry', label: 'Entry', icon: PackagePlus },
+  { to: '/billing', label: 'Billing', icon: ShoppingCart },
   { to: '/stock', label: 'Stock', icon: Database },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/settings', label: 'Settings', icon: SlidersHorizontal, adminOnly: true },

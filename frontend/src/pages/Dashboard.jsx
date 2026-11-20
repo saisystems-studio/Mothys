@@ -10,14 +10,14 @@ import { formatDate } from '../utils/format'
 const CARDS = [
   { key: 'total_products', label: 'Total Products', icon: Box },
   { key: 'total_units', label: 'Total Units', icon: Layers },
-  { key: 'total_entries', label: 'Total Entries', icon: FileText },
-  { key: 'total_billings', label: 'Total Billings', icon: ShoppingCart },
+  { key: 'today_entries', label: "Today's Entries", icon: FileText },
+  { key: 'today_billings', label: "Today's Billings", icon: ShoppingCart },
 ]
 
 const ACTIONS = [
   { label: 'Add Product', icon: Box, to: '/products?add=1' },
-  { label: 'Add Unit', icon: Layers, to: '/units?add=1' },
-  { label: 'New Entry & Billing', icon: ShoppingCart, to: '/entry-billing' },
+  { label: 'New Entry ', icon: Layers, to: '/entry' },
+  { label: 'New Billing', icon: ShoppingCart, to: '/billing' },
   { label: 'View Reports', icon: BarChart3, to: '/reports' },
 ]
 

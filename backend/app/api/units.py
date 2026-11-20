@@ -93,17 +93,29 @@ def delete_unit(unit_id: int, db: Session = Depends(get_db)):
             detail="Unit not found."
         )
 
-    has_products = (
-        db.query(Product)
-        .filter(Product.unit_id == unit_id)
-        .first()
-    )
+    # has_products = (
+    #     db.query(Product)
+    #     .filter(Product.unit_id == unit_id)
+    #     .first()
+    # )
+
+    # if has_products:
+    #     raise HTTPException(
+    #         status_code=409,
+    #         detail="Unit cannot be deleted because products are assigned to it. Deactivate it instead."
+    #     )
+
+    has_products = db.query(Product).filter(
+        (Product.unit_id == unit_id) |
+        (Product.units.any(Unit.id == unit_id))
+    ).first()
 
     if has_products:
         raise HTTPException(
             status_code=409,
             detail="Unit cannot be deleted because products are assigned to it. Deactivate it instead."
         )
+
 
     has_voucher_history = (
         db.query(VoucherItem)

@@ -1,7 +1,7 @@
-
 from datetime import datetime
 from decimal import Decimal
-
+from decimal import Decimal
+from pydantic import BaseModel
 from sqlalchemy import (
     Column,
     Integer,
@@ -24,6 +24,14 @@ class StockMovement(Base):
     product_id = Column(
         Integer,
         ForeignKey("products.id"),
+        nullable=False
+    )
+
+    # Unit this movement was recorded in. Stock is kept per product + unit,
+    # and units are never converted into each other.
+    unit_id = Column(
+        Integer,
+        ForeignKey("units.id"),
         nullable=False
     )
 
@@ -71,3 +79,4 @@ class StockMovement(Base):
             mssql_where=voucher_item_id.isnot(None)
         ),
     )
+    
