@@ -8,7 +8,7 @@
 // export const clearToken = () => localStorage.removeItem(TOKEN_KEY)
 
 // const api = axios.create({
-//   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010',
+//   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8011',
 //   timeout: 20000,
 // })
 
@@ -79,7 +79,7 @@ export const clearToken = () => {
 
 // Axios instance
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8011',
   timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
@@ -206,3 +206,4 @@ export function getErrorMessage(error) {
 }
 
 export default api
+

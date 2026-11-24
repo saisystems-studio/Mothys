@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class VoucherItemCreate(BaseModel):
     product_id: int
+    unit_id: int | None = None
     quantity: Decimal = Field(
         gt=0,
         max_digits=15,

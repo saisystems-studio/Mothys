@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useSearchParams } from 'react-router-dom'
@@ -157,7 +156,8 @@ export default function Products() {
 
   const [showHidden, setShowHidden] = useState(false)
 
-  const [editing, setEditing] = useState(null) // { product, name, unitIds }
+  // { product, name, unitIds, openings: { [unitId]: 'text' } }
+  const [editing, setEditing] = useState(null)
 
   const [editError, setEditError] = useState('')
 
@@ -300,7 +300,7 @@ export default function Products() {
   }
 
 
-  // Existing active product matching the typed name.
+  // Existing product matching the typed name.
   const typedMatch = useMemo(() => {
     const name = form.name.trim().toLowerCase()
 
@@ -443,7 +443,23 @@ export default function Products() {
   }
 
 
-  // Save name / unit changes. Updates show on every page.
+  // Units that already hold stock cannot be removed.
+  const lockedUnitIds = editing
+    ? (stockByProduct[editing.product.id] ?? [])
+        .filter((s) => Number(s.remaining_stock) !== 0)
+        .map((s) => Number(s.unit_id))
+    : []
+
+
+  // Selected units that hold no stock yet: an opening balance can be set
+  // for them (or simply left empty to skip it).
+  const openingUnitIds = editing
+    ? editing.unitIds.filter((id) => !lockedUnitIds.includes(Number(id)))
+    : []
+
+
+  // Save name / unit changes (and optional opening balances).
+  // Updates show on every page.
   const handleEdit = async (e) => {
     e.preventDefault()
 
@@ -463,6 +479,18 @@ export default function Products() {
 
     if (clash) return setEditError('Another product already has this name.')
 
+
+    // Validate the opening balances typed for the selected units.
+    for (const uid of openingUnitIds) {
+      const text = (editing.openings[uid] ?? '').trim()
+
+      if (text !== '' && !NUM_RE.test(text)) {
+        return setEditError(
+          `Opening balance for ${unitName[uid] ?? 'unit'}: enter a number (0 or more, up to 3 decimals).`,
+        )
+      }
+    }
+
     setEditError('')
     setBusy(true)
 
@@ -479,7 +507,34 @@ export default function Products() {
         unit_ids: ordered,
       })
 
-      toast.success('Product updated.')
+
+      // Opening balances (only the ones that were filled in).
+      let openingFailed = null
+
+      for (const uid of openingUnitIds) {
+        const text = (editing.openings[uid] ?? '').trim()
+
+        if (text === '' || Number(text) <= 0) continue
+
+        try {
+          await createStockEntry(
+            editing.product.id,
+            Number(text),
+            Number(uid),
+          )
+        } catch (err) {
+          openingFailed = getErrorMessage(err)
+        }
+      }
+
+      if (openingFailed) {
+        toast.error(
+          `Product updated, but opening balance failed: ${openingFailed}`,
+        )
+      } else {
+        toast.success('Product updated.')
+      }
+
       setEditing(null)
       reload()
     } catch (err) {
@@ -493,13 +548,6 @@ export default function Products() {
   // Units offered while editing: active ones plus any the product already has.
   const editUnits = editing
     ? units.filter((u) => u.is_active || editing.unitIds.includes(u.id))
-    : []
-
-  // Units that already hold stock cannot be removed.
-  const lockedUnitIds = editing
-    ? (stockByProduct[editing.product.id] ?? [])
-        .filter((s) => Number(s.remaining_stock) !== 0)
-        .map((s) => Number(s.unit_id))
     : []
 
 
@@ -530,6 +578,35 @@ export default function Products() {
   }
 
 
+  // Stock row of one unit of a product.
+  const stockRowFor = (p, unitId) =>
+    (stockByProduct[p.id] ?? []).find(
+      (s) => Number(s.unit_id) === Number(unitId),
+    )
+
+
+  // Stock of one unit of a product, formatted with its unit name.
+  const stockFor = (p, unitId) => {
+    const row = stockRowFor(p, unitId)
+
+    return formatQtyWithUnit(
+      row ? row.remaining_stock : 0,
+      unitName[unitId],
+    )
+  }
+
+
+  // One row per product. Units and stocks are joined with " / ".
+  const rows = useMemo(
+    () =>
+      visible.map((p) => ({
+        product: p,
+        unitIds: getUnitIds(p),
+      })),
+    [visible],
+  )
+
+
   // Download the rows shown in the grid as a CSV file (opens in Excel).
   const exportCsv = () => {
     if (rows.length === 0) {
@@ -541,20 +618,22 @@ export default function Products() {
 
     const lines = [['S.No', 'Product Name', 'Unit', 'Current Stock']]
 
-    rows.forEach(({ product: p, unitId }, i) => {
-      const stockRow =
-        unitId != null
-          ? (stockByProduct[p.id] ?? []).find(
-              (s) => Number(s.unit_id) === Number(unitId),
-            )
-          : null
+    rows.forEach(({ product: p, unitIds }, i) => {
+      const unitsText = unitIds.length
+        ? unitIds.map((id) => unitName[id] ?? '').join(' / ')
+        : ''
 
-      lines.push([
-        i + 1,
-        p.product_name,
-        unitId != null ? unitName[unitId] ?? '' : '',
-        stockRow ? Number(stockRow.remaining_stock) : 0,
-      ])
+      const stockText = unitIds.length
+        ? unitIds
+            .map((id) => {
+              const row = stockRowFor(p, id)
+
+              return `${row ? Number(row.remaining_stock) : 0} ${unitName[id] ?? ''}`.trim()
+            })
+            .join(' / ')
+        : ''
+
+      lines.push([i + 1, p.product_name, unitsText, stockText])
     })
 
     const csv = '\uFEFF' + lines.map((l) => l.map(cell).join(',')).join('\r\n')
@@ -610,36 +689,6 @@ export default function Products() {
 
     return names.length ? names.join(', ') : '—'
   }
-
-
-  // Stock of one unit of a product.
-  const stockFor = (p, unitId) => {
-    const row = (stockByProduct[p.id] ?? []).find(
-      (s) => Number(s.unit_id) === Number(unitId),
-    )
-
-    return formatQtyWithUnit(
-      row ? row.remaining_stock : 0,
-      unitName[unitId],
-    )
-  }
-
-
-  // One row per product and unit.
-  const rows = useMemo(
-    () =>
-      visible.flatMap((p) => {
-        const ids = getUnitIds(p)
-
-        return (ids.length ? ids : [null]).map(
-          (unitId) => ({
-            product: p,
-            unitId,
-          }),
-        )
-      }),
-    [visible],
-  )
 
 
   return (
@@ -722,6 +771,30 @@ export default function Products() {
           color: #64748b;
           font-size: 12px;
           font-weight: 600;
+        }
+
+        .unit-sep {
+          color: #8a97ad;
+          font-weight: 400;
+          padding: 0 4px;
+        }
+
+        .opening-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 10px;
+        }
+
+        .opening-grid .opening-item {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .opening-grid .opening-item span {
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 700;
         }
       `}</style>
 
@@ -856,13 +929,6 @@ export default function Products() {
                 {formErrors.name}
               </span>
             )}
-
-            {/* {!formErrors.name && typedMatch?.is_active && (
-              <span className="field-hint">
-                Product exists. Choose a new unit to add it
-                (opening balance is for that unit).
-              </span>
-            )} */}
           </div>
 
 
@@ -961,22 +1027,34 @@ export default function Products() {
             </thead>
 
             <tbody>
-              {rows.map(({ product: p, unitId }, i) => (
-                <tr key={`${p.id}-${unitId ?? 'none'}`}>
+              {rows.map(({ product: p, unitIds }, i) => (
+                <tr key={p.id}>
                   <td>{i + 1}</td>
 
                   <td>{p.product_name}</td>
 
+                  {/* Units: KGS / PCS */}
                   <td>
-                    {unitId != null
-                      ? unitName[unitId] ?? '—'
-                      : '—'}
+                    {unitIds.length === 0
+                      ? '—'
+                      : unitIds.map((id, k) => (
+                          <span key={id}>
+                            {k > 0 && <span className="unit-sep">/</span>}
+                            {unitName[id] ?? '—'}
+                          </span>
+                        ))}
                   </td>
 
+                  {/* Stocks: 96.5 KGS / 2,400 PCS */}
                   <td className="num">
-                    {unitId != null
-                      ? stockFor(p, unitId)
-                      : '—'}
+                    {unitIds.length === 0
+                      ? '—'
+                      : unitIds.map((id, k) => (
+                          <span key={id}>
+                            {k > 0 && <span className="unit-sep">/</span>}
+                            {stockFor(p, id)}
+                          </span>
+                        ))}
                   </td>
 
                   <td className="center">
@@ -992,6 +1070,7 @@ export default function Products() {
                             product: p,
                             name: p.product_name,
                             unitIds: getUnitIds(p),
+                            openings: {},
                           })
                         }}
                       >
@@ -1082,6 +1161,44 @@ export default function Products() {
                 Changes apply everywhere (Entry, Billing, Stock, Reports).
               </span>
             </div>
+
+            {/* Opening balance: only for selected units that have no stock yet.
+                Leave empty to skip it. */}
+            {openingUnitIds.length > 0 && (
+              <div className="field">
+                <label>
+                  Opening Balance <span className="opt">(optional)</span>
+                </label>
+
+                <div className="opening-grid">
+                  {openingUnitIds.map((uid) => (
+                    <label key={uid} className="opening-item">
+                      <span>{unitName[uid] ?? 'Unit'}</span>
+
+                      <input
+                        inputMode="decimal"
+                        className="input"
+                        placeholder="Leave empty to skip"
+                        value={editing.openings[uid] ?? ''}
+                        onChange={(e) =>
+                          setEditing((s) => ({
+                            ...s,
+                            openings: {
+                              ...s.openings,
+                              [uid]: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <span className="field-hint">
+                  Units that already have stock are not listed here.
+                </span>
+              </div>
+            )}
 
             <div
               className="modal-actions"
