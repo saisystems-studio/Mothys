@@ -88,7 +88,9 @@ from app.core.security import (
     create_access_token,
     get_current_user,
     require_admin,
-)
+    is_registered_admin,
+    get_user_permissions,
+)   
 from app.models.users import User
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.services.nexus_service import register_customer, verify_login, NexusError
@@ -306,7 +308,9 @@ def get_logged_in_user(
         "username": current_user.username,
         "name": current_user.name,
         "role_id": current_user.role_id,
-        "auth_provider": current_user.auth_provider
+        "auth_provider": current_user.auth_provider,
+        "is_admin": is_registered_admin(current_user),
+        "permissions": get_user_permissions(current_user)
     }
 
 
@@ -318,4 +322,58 @@ def admin_test(
         "message": "Admin access granted",
         "username": current_user.username,
         "role_id": current_user.role_id
+    }
+@router.get("/subscription")
+def get_subscription(
+    current_user=Depends(require_admin),
+):
+    if not current_user.nexus_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nexus customer ID is not linked to this admin account.",
+        )
+
+    try:
+        license_data = validate_license(
+            user_id=current_user.nexus_user_id
+        )
+    except NexusError as e:
+        logger.error(
+            "Subscription validation failed: code=%s status=%s",
+            e.code,
+            e.status_code,
+        )
+        raise HTTPException(
+            status_code=e.status_code,
+            detail="Unable to retrieve subscription details from Nexus.",
+        )
+
+    expires_at = license_data.get("expires_at")
+    remaining_days = None
+
+    if expires_at:
+        try:
+            expiry = datetime.fromisoformat(
+                expires_at.replace("Z", "+00:00")
+            )
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+
+            seconds_left = (
+                expiry - datetime.now(timezone.utc)
+            ).total_seconds()
+
+            remaining_days = max(0, int((seconds_left + 86399) // 86400))
+        except (ValueError, TypeError, AttributeError):
+            remaining_days = None
+
+    return {
+        "license_type": license_data.get("license_type"),
+        "status": license_data.get("state"),
+        "starts_at": license_data.get("starts_at"),
+        "expires_at": expires_at,
+        "remaining_days": remaining_days,
+        "valid": license_data.get("valid"),
+        "active_devices": license_data.get("active_devices"),
+        "device_limit": license_data.get("device_limit"),
     }

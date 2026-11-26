@@ -122,3 +122,15 @@ def verify_login(*, user_id: str, password: str, device_id: str) -> dict:
             "device_id": device_id,
         },
     )
+def validate_license(*, user_id: str) -> dict:
+    """
+    POST /licenses/validate
+    Returns current Nexus license and subscription information.
+    """
+    return _post(
+        "/licenses/validate",
+        {
+            "project_code": NEXUS_PROJECT_CODE,
+            "user_id": user_id,
+        },
+    )

@@ -203,7 +203,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import (
+    get_current_user,
+    require_page_permission
+)
 
 from app.models.products import Product
 from app.models.units import Unit
@@ -220,7 +223,7 @@ from app.schemas.products import (
 router = APIRouter(
     prefix="/products",
     tags=["Products"],
-    dependencies=[Depends(get_current_user)]
+    dependencies=[Depends(require_page_permission("products"))]
 )
 
 

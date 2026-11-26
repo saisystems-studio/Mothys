@@ -1,4 +1,6 @@
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -14,16 +16,48 @@ from app.schemas.users import (
     UserPasswordUpdate,
     UserResponse
 )
-from app.core.security import get_current_user
+from app.core.security import require_admin
 
 
 router = APIRouter(
     prefix="/users",
     tags=["Users"],
-    dependencies=[Depends(get_current_user)]
+    dependencies=[Depends(require_admin)]
 )
 
 password_hash = PasswordHash.recommended()
+
+ALLOWED_PERMISSIONS = {
+    "dashboard",
+    "products",
+    "units",
+    "products_in",
+    "billing",
+    "stock",
+    "reports",
+}
+
+
+def validate_permissions(permissions):
+    if not isinstance(permissions, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid permissions format"
+        )
+
+    if any(key not in ALLOWED_PERMISSIONS for key in permissions):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid page permission"
+        )
+
+    if any(type(value) is not bool for value in permissions.values()):
+        raise HTTPException(
+            status_code=400,
+            detail="Permission values must be true or false"
+        )
+
+    return json.dumps(permissions)
 
 
 def get_local_user_or_404(user_id: int, db: Session):
@@ -46,9 +80,22 @@ def get_local_user_or_404(user_id: int, db: Session):
     return user
 
 
+def user_response(user):
+    try:
+        permissions = json.loads(user.permissions or "{}")
+        if not isinstance(permissions, dict):
+            permissions = {}
+    except (ValueError, TypeError):
+        permissions = {}
+
+    user.permissions = permissions
+    return user
+
+
 @router.get("/", response_model=list[UserResponse])
 def get_users(db: Session = Depends(get_db)):
-    return db.query(User).order_by(User.id).all()
+    users = db.query(User).order_by(User.id).all()
+    return [user_response(user) for user in users]
 
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -66,7 +113,7 @@ def get_user(
             detail="User not found"
         )
 
-    return user
+    return user_response(user)
 
 
 @router.post(
@@ -77,7 +124,7 @@ def get_user(
 def create_user(
     user_data: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     existing_user = db.query(User).filter(
         User.username == user_data.username
@@ -110,6 +157,12 @@ def create_user(
             detail="Role not found"
         )
 
+    if user_data.role_id == 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Local users cannot be assigned the Admin role"
+        )
+
     new_user = User(
         username=user_data.username,
         name=user_data.name,
@@ -118,6 +171,7 @@ def create_user(
         password_hash=password_hash.hash(user_data.password),
         auth_provider="LOCAL",
         role_id=user_data.role_id,
+        permissions=validate_permissions(user_data.permissions),
         created_by=current_user.id
     )
 
@@ -126,7 +180,7 @@ def create_user(
         db.commit()
         db.refresh(new_user)
 
-        return new_user
+        return user_response(new_user)
 
     except IntegrityError:
         db.rollback()
@@ -182,6 +236,12 @@ def update_user(
             update_data["email"] = str(email)
 
     if "role_id" in update_data and update_data["role_id"] is not None:
+        if update_data["role_id"] == 1:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Local users cannot be assigned the Admin role"
+            )
+
         role = db.query(Role).filter(
             Role.id == update_data["role_id"]
         ).first()
@@ -192,6 +252,11 @@ def update_user(
                 detail="Role not found"
             )
 
+    if "permissions" in update_data:
+        update_data["permissions"] = validate_permissions(
+            update_data["permissions"]
+        )
+
     for field, value in update_data.items():
         setattr(user, field, value)
 
@@ -199,7 +264,7 @@ def update_user(
         db.commit()
         db.refresh(user)
 
-        return user
+        return user_response(user)
 
     except IntegrityError:
         db.rollback()
@@ -214,7 +279,7 @@ def update_user_status(
     user_id: int,
     status_data: UserStatusUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     user = get_local_user_or_404(user_id, db)
 
@@ -230,7 +295,7 @@ def update_user_status(
         db.commit()
         db.refresh(user)
 
-        return user
+        return user_response(user)
 
     except Exception:
         db.rollback()
@@ -255,7 +320,7 @@ def reset_user_password(
         db.commit()
         db.refresh(user)
 
-        return user
+        return user_response(user)
 
     except Exception:
         db.rollback()

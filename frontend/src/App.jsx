@@ -1,3 +1,4 @@
+
 import { Navigate, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import MainLayout from './layouts/MainLayout'
@@ -15,34 +16,73 @@ import Settings from './pages/Settings'
 
 function PublicOnly({ children }) {
   const { isAuthenticated, loading } = useAuth()
+
   if (loading) return null
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : children
+
+  return isAuthenticated
+    ? <Navigate to="/dashboard" replace />
+    : children
 }
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
-      <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
+      <Route
+        path="/login"
+        element={<PublicOnly><Login /></PublicOnly>}
+      />
+
+      <Route
+        path="/register"
+        element={<PublicOnly><Register /></PublicOnly>}
+      />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<MainLayout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/units" element={<Units />} />
-          <Route path="/entry" element={<Entry />} />
-          <Route path="/billing" element={<Billing />} />
-          {/* Old URL kept so existing bookmarks still work */}
-          <Route path="/entry-billing" element={<Navigate to="/billing" replace />} />
-          <Route path="/stock" element={<Stock />} />
-          <Route path="/reports" element={<Reports />} />
+
+          <Route element={<ProtectedRoute requiredPermission="dashboard" />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="products" />}>
+            <Route path="/products" element={<Products />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="units" />}>
+            <Route path="/units" element={<Units />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="products_in" />}>
+            <Route path="/entry" element={<Entry />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="billing" />}>
+            <Route path="/billing" element={<Billing />} />
+            <Route
+              path="/entry-billing"
+              element={<Navigate to="/billing" replace />}
+            />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="stock" />}>
+            <Route path="/stock" element={<Stock />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="reports" />}>
+            <Route path="/reports" element={<Reports />} />
+          </Route>
+
           <Route element={<ProtectedRoute adminOnly />}>
             <Route path="/settings" element={<Settings />} />
           </Route>
+
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route
+        path="*"
+        element={<Navigate to="/dashboard" replace />}
+      />
     </Routes>
   )
 }

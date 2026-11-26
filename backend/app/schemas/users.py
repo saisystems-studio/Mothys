@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from typing import Optional
 
@@ -15,6 +14,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=1)
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
 
 class UserUpdate(BaseModel):
@@ -23,6 +23,7 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     contact_number: str | None = None
     role_id: int | None = None
+    permissions: dict[str, bool] | None = None
 
 
 class UserStatusUpdate(BaseModel):
@@ -36,6 +37,7 @@ class UserPasswordUpdate(BaseModel):
 class UserResponse(UserBase):
     id: int
     auth_provider: str
+    permissions: dict[str, bool] = Field(default_factory=dict)
     is_active: bool
     must_change_password: bool
     last_login: Optional[datetime] = None

@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     CheckConstraint,
+    Text,
     text
 )
 
@@ -28,6 +29,11 @@ class User(Base):
     auth_provider = Column(String(10), nullable=False)
 
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    permissions = Column(
+    Text,
+    nullable=True,
+    server_default=text("'{}'")
+)
 
     is_active = Column(Boolean, nullable=False, server_default=text("1"))
     must_change_password = Column(

@@ -1,14 +1,10 @@
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AuthContext } from './authContext'
 import * as authService from '../services/authService'
 import { getRoles } from '../services/rolesService'
 import { getToken, clearToken, UNAUTHORIZED_EVENT } from '../services/api'
 
-/**
- * Session strategy: the JWT is kept in localStorage and attached by the Axios
- * interceptor. On load the session is validated with GET /auth/me. The backend
- * remains authoritative for authorization; role info only shapes the UI.
- */
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [roles, setRoles] = useState([])
@@ -21,7 +17,9 @@ export default function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!getToken()) return undefined
+
     let cancelled = false
+
     fetchSession()
       .then(([me, roleList]) => {
         if (cancelled) return
@@ -30,10 +28,12 @@ export default function AuthProvider({ children }) {
       })
       .catch(() => {
         clearToken()
+        setUser(null)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
+
     return () => {
       cancelled = true
     }
@@ -43,13 +43,18 @@ export default function AuthProvider({ children }) {
     const onUnauthorized = () => {
       setUser(null)
     }
+
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
-    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+
+    return () => {
+      window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+    }
   }, [])
 
   const login = useCallback(
     async (username, password) => {
       await authService.login(username, password)
+
       try {
         const [me, roleList] = await fetchSession()
         setUser(me)
@@ -65,15 +70,19 @@ export default function AuthProvider({ children }) {
   const logout = useCallback(() => {
     authService.logout()
     setUser(null)
+    setRoles([])
   }, [])
 
   const value = useMemo(() => {
-    const roleName = roles.find((r) => r.id === user?.role_id)?.role_name ?? ''
+    const roleName = roles.find(
+      (r) => r.id === user?.role_id
+    )?.role_name ?? ''
+
     return {
       user,
       roles,
       roleName,
-      isAdmin: roleName.toLowerCase().includes('admin'),
+      isAdmin: user?.is_admin === true,
       isAuthenticated: Boolean(user),
       loading,
       login,
@@ -81,5 +90,9 @@ export default function AuthProvider({ children }) {
     }
   }, [user, roles, loading, login, logout])
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  )
 }

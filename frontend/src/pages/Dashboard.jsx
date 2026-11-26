@@ -16,8 +16,8 @@ const CARDS = [
 
 const ACTIONS = [
   { label: 'Add Product', icon: Box, to: '/products?add=1' },
-  { label: 'New Entry ', icon: Layers, to: '/entry' },
-  { label: 'New Billing', icon: ShoppingCart, to: '/billing' },
+  { label: 'Product IN', icon: Layers, to: '/entry' },
+  { label: 'Billing', icon: ShoppingCart, to: '/billing' },
   { label: 'View Reports', icon: BarChart3, to: '/reports' },
 ]
 

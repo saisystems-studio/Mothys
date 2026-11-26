@@ -8,6 +8,27 @@ export const createBilling = async (items) => (await api.post('/vouchers/', { it
 export const getVouchers = async () => (await api.get('/vouchers/')).data
 
 export const getVoucherItems = async (voucherId) => (await api.get(`/vouchers/${voucherId}/items`)).data
+
 // PATCH /vouchers/{voucher_id}
 export const updateVoucher = async (voucherId, payload) =>
   (await api.patch(`/vouchers/${voucherId}`, payload)).data
+
+// Create a voucher on a chosen date.
+// POST does not take a date, so create it first, then set the date with PATCH.
+export const createVoucher = async ({ voucher_date, items }) => {
+  const created = await createBilling(items)
+
+  // Already on the chosen date: nothing more to do.
+  if (String(created.voucher_date).slice(0, 10) === voucher_date) return created
+
+  try {
+    return await updateVoucher(created.id, { voucher_date, items })
+  } catch (err) {
+    err.message = `Voucher ${created.voucher_number} was created, but its date was not changed. Edit that voucher instead of creating it again.`
+    throw err
+  }
+}
+
+// DELETE /vouchers/{voucher_id}
+export const deleteVoucher = async (voucherId) =>
+  (await api.delete(`/vouchers/${voucherId}`)).data

@@ -1868,16 +1868,19 @@ export default function Billing() {
   //  - product with ONE unit  -> billed in full (edit the box to bill less)
   //  - product with 2+ units  -> only the unit(s) you EDIT are billed; the others stay in stock
   // Unticking puts everything back to the locked, untouched state.
-  const toggleGroup = (group, checked) =>
-    setEdits((prev) => {
-      const next = { ...prev }
-      group.lines.forEach((l) => {
-        next[l.key] = checked
-          ? { selected: true, quantity: undefined, touched: group.lines.length === 1 }
-          : { selected: false, quantity: undefined, touched: false }
-      })
-      return next
+  // Product checkbox: tick / untick the product. Ticking unlocks all its unit boxes and
+// bills every unit in full (edit a box to bill less; set it to 0 / blank to skip that unit).
+// Unticking puts everything back to the locked, untouched state.
+const toggleGroup = (group, checked) =>
+  setEdits((prev) => {
+    const next = { ...prev }
+    group.lines.forEach((l) => {
+      next[l.key] = checked
+        ? { selected: true, quantity: undefined, touched: true }   // <-- was: group.lines.length === 1
+        : { selected: false, quantity: undefined, touched: false }
     })
+    return next
+  })
 
   // Header checkbox: bill everything in full.
   const toggleAll = (checked) =>
@@ -2285,10 +2288,10 @@ export default function Billing() {
       <div className="page-head">
         <h1>Billing</h1>
         <div className="page-head-tools">
-          <span className="chip">
+          {/* <span className="chip">
             <Calendar size={16} />
             {formatDate(now)}
-          </span>
+          </span> */}
           <span className="chip">
             <Clock size={16} />
             {formatTime(now)}

@@ -98,13 +98,79 @@ def get_current_user(
     return user
 
 
+def is_registered_admin(user: User) -> bool:
+    return (
+        user.auth_provider == "NEXUS"
+        or user.role_id == 1
+    )
+
+
+def get_user_permissions(user: User) -> dict:
+    import json
+
+    if is_registered_admin(user):
+        return {
+            "dashboard": True,
+            "products": True,
+            "units": True,
+            "products_in": True,
+            "billing": True,
+            "stock": True,
+            "reports": True,
+        }
+
+    try:
+        permissions = json.loads(user.permissions or "{}")
+
+        if not isinstance(permissions, dict):
+            return {}
+
+        allowed_pages = {
+            "dashboard",
+            "products",
+            "units",
+            "products_in",
+            "billing",
+            "stock",
+            "reports",
+        }
+
+        return {
+            page: permissions.get(page) is True
+            for page in allowed_pages
+        }
+
+    except (ValueError, TypeError):
+        return {}
+
+
 def require_admin(
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role_id != 1:
+    if not is_registered_admin(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
         )
 
     return current_user
+
+
+def require_page_permission(page: str):
+    def permission_checker(
+        current_user: User = Depends(get_current_user)
+    ):
+        if is_registered_admin(current_user):
+            return current_user
+
+        permissions = get_user_permissions(current_user)
+
+        if permissions.get(page) is not True:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access this page"
+            )
+
+        return current_user
+
+    return permission_checker

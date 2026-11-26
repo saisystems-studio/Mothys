@@ -476,7 +476,10 @@ from sqlalchemy import case, func
 from sqlalchemy.exc import IntegrityError
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import (
+    get_current_user,
+    require_page_permission
+)
 
 from app.models.vouchers import Voucher
 from app.models.voucher_items import VoucherItem
@@ -496,7 +499,7 @@ from datetime import datetime
 router = APIRouter(
     prefix="/vouchers",
     tags=["Vouchers"],
-    dependencies=[Depends(get_current_user)]
+    dependencies=[Depends(require_page_permission("billing"))]
 )
 
 
@@ -767,15 +770,30 @@ def update_voucher(
                 detail="The voucher's product lines cannot be changed"
             )
 
-        for old_item, new_item in zip(
-            existing_items,
-            voucher_data.items
-        ):
-            if old_item.product_id != new_item.product_id:
+                # Match each saved line to the sent line by product AND unit.
+        remaining = list(voucher_data.items)
+        ordered = []
+
+        for old_item in existing_items:
+            match = next(
+                (
+                    i for i in remaining
+                    if i.product_id == old_item.product_id
+                    and i.unit_id in (None, old_item.unit_id)
+                ),
+                None
+            )
+
+            if match is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="The voucher's products cannot be changed"
                 )
+
+            remaining.remove(match)
+            ordered.append(match)
+
+        voucher_data.items = ordered
 
         product_ids = sorted({
             item.product_id for item in existing_items
@@ -926,6 +944,78 @@ def update_voucher(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Voucher update failed because of a database constraint"
+        )
+
+    except Exception:
+        db.rollback()
+        raise
+@router.delete("/{voucher_id}")
+def delete_voucher(
+    voucher_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        # Find and lock the voucher.
+        voucher = (
+            db.query(Voucher)
+            .filter(Voucher.id == voucher_id)
+            .with_hint(
+                Voucher,
+                "WITH (UPDLOCK, HOLDLOCK)",
+                dialect_name="mssql"
+            )
+            .first()
+        )
+
+        if not voucher:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Billing voucher not found"
+            )
+
+        items = (
+            db.query(VoucherItem)
+            .filter(VoucherItem.voucher_id == voucher_id)
+            .all()
+        )
+        item_ids = [item.id for item in items]
+        product_ids = sorted({item.product_id for item in items})
+
+        if item_ids:
+            # Lock products in a consistent order (same as create/update).
+            (
+                db.query(Product)
+                .filter(Product.id.in_(product_ids))
+                .order_by(Product.id)
+                .with_hint(
+                    Product,
+                    "WITH (UPDLOCK, HOLDLOCK)",
+                    dialect_name="mssql"
+                )
+                .all()
+            )
+
+            # 1. Removing the OUT movements restores the stock.
+            db.query(StockMovement).filter(
+                StockMovement.voucher_item_id.in_(item_ids)
+            ).delete(synchronize_session=False)
+
+            # 2. Remove the voucher lines.
+            db.query(VoucherItem).filter(
+                VoucherItem.voucher_id == voucher_id
+            ).delete(synchronize_session=False)
+
+        # 3. Remove the voucher.
+        db.delete(voucher)
+        db.commit()
+
+        return {"message": "Voucher deleted"}
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Voucher could not be deleted because of a database constraint"
         )
 
     except Exception:

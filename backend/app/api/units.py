@@ -5,11 +5,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.units import Unit
 from app.schemas.units import UnitCreate, UnitUpdate, UnitResponse
-from app.core.security import get_current_user
+from app.core.security import require_page_permission
 router = APIRouter(
     prefix="/units",
     tags=["Units"],
-    dependencies=[Depends(get_current_user)]
+    dependencies=[Depends(require_page_permission("units"))]
 )
 from sqlalchemy.exc import IntegrityError
 from app.models.products import Product

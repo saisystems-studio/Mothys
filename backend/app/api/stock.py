@@ -123,7 +123,10 @@ from sqlalchemy import case, func
 from sqlalchemy.exc import IntegrityError
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import (
+    get_current_user,
+    require_page_permission
+)
 
 from app.models.products import Product
 from app.models.stock_movements import StockMovement
@@ -131,14 +134,14 @@ from app.models.users import User
 
 from app.schemas.stock_movements import (
     StockMovementCreate,
-    StockMovementResponse
+    StockMovementResponse,
+    StockAdjustmentCreate
 )
 
 
 router = APIRouter(
     prefix="/stock",
-    tags=["Stock"],
-    dependencies=[Depends(get_current_user)]
+    tags=["Stock"]
 )
 
 
@@ -150,7 +153,10 @@ router = APIRouter(
 # Rice / Kg  = 25
 # =========================================================
 
-@router.get("/")
+@router.get(
+    "/",
+    dependencies=[Depends(require_page_permission("stock"))]
+)
 def get_stock(db: Session = Depends(get_db)):
 
     stock_quantity = func.coalesce(
@@ -216,7 +222,8 @@ def get_stock(db: Session = Depends(get_db)):
 @router.post(
     "/entry",
     response_model=StockMovementResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_page_permission("products_in"))]
 )
 def create_stock_entry(
     stock_data: StockMovementCreate,
@@ -311,13 +318,19 @@ def create_stock_entry(
 # CREATE STOCK ADJUSTMENT
 # =========================================================
 
+from decimal import Decimal
+from sqlalchemy import case, func
+# also import StockAdjustmentCreate from your schemas
+
+
 @router.post(
     "/adjustment",
     response_model=StockMovementResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_page_permission("stock"))]
 )
 def create_stock_adjustment(
-    stock_data: StockMovementCreate,
+    stock_data: StockAdjustmentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -362,7 +375,36 @@ def create_stock_adjustment(
             )
         )
 
-    # Create stock adjustment movement
+    # A reduction must not take stock of this product + unit below zero
+    if stock_data.quantity < 0:
+        remaining = (
+            db.query(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (StockMovement.movement_type == "OUT", -StockMovement.quantity),
+                            else_=StockMovement.quantity,
+                        )
+                    ),
+                    0,
+                )
+            )
+            .filter(
+                StockMovement.product_id == product.id,
+                StockMovement.unit_id == unit_id,
+            )
+            .scalar()
+        )
+
+        remaining = Decimal(str(remaining))
+
+        if remaining + stock_data.quantity < 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Not enough stock to reduce. Available: {remaining}"
+            )
+
+    # Create stock adjustment movement (quantity is signed)
     new_movement = StockMovement(
         product_id=product.id,
         unit_id=unit_id,
